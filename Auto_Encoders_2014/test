@@ -7,3 +7,35 @@ result_df = df_filtered.groupBy("Account2", "Receiving Currency").agg(
     sum(when(col("Payment Format") == "virement", col("Amount Received"))).alias("received"),
     max(when(col("suspicion_of_laundering") == True, 1).otherwise(0)).alias("has_laundering")
 )
+from pyspark.sql import SparkSession
+from pyspark.sql.window import Window
+from pyspark.sql import functions as F
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("TransactionAnalysis").getOrCreate()
+
+# Load data
+# Replace "your_input_file_path" with the path to your data file
+df = spark.read.csv("your_input_file_path", header=True, inferSchema=True)
+
+# Apply date filters
+# Replace DATE_START and DATE_STOP with your start and end dates
+df_filtered = df.filter((F.col("Timestamp") >= "DATE_START") & (F.col("Timestamp") <= "DATE_STOP"))
+
+# Define a window specification
+windowSpec = Window.partitionBy("Account2", "Receiving Currency").orderBy("Timestamp")
+
+# Calculate statistics
+result_df = df_filtered.withColumn("prev_timestamp", F.lag("Timestamp").over(windowSpec)) \
+    .withColumn("avg_delay_transactions", F.col("Timestamp") - F.col("prev_timestamp")) \
+    .groupBy("Account2", "Receiving Currency").agg(
+        F.count("Timestamp").alias("num_transactions"),
+        F.round(F.avg("avg_delay_transactions")).alias("avg_delay_transactions"),
+        F.sum(F.when(F.col("Payment Format") == "virement", F.col("Amount Paid"))).alias("withdrawals"),
+        F.sum(F.when(F.col("Payment Format") == "virement", F.col("Amount Received"))).alias("received"),
+        F.max(F.when(F.col("suspicion_of_laundering"), 1).otherwise(0)).alias("has_laundering")
+    ).drop("prev_timestamp")
+
+# Save the result
+# Replace "your_output_path" with the path to your output directory
+result_df.write.mode("overwrite").csv("your_output_path")
