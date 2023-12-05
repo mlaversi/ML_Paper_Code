@@ -1,0 +1,9 @@
+from pyspark.sql.functions import avg, sum, count, when
+
+result_df = df_filtered.groupBy("Account2", "Receiving Currency").agg(
+    count("Timestamp").alias("num_transactions"),
+    (avg("Timestamp") - lag("Timestamp").over(windowSpec)).alias("avg_delay_transactions"),
+    sum(when(col("Payment Format") == "virement", col("Amount Paid"))).alias("withdrawals"),
+    sum(when(col("Payment Format") == "virement", col("Amount Received"))).alias("received"),
+    max(when(col("suspicion_of_laundering") == True, 1).otherwise(0)).alias("has_laundering")
+)
